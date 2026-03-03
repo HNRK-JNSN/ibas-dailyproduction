@@ -71,3 +71,14 @@ Now add the CSV read capability to the `Get()` method in the controller. See lin
 We finish off the solution by converting the rows returned by LoadDataFromCSV() into a list of DailyProductionDTOs, as required by the frontend -- see lines 42-47.
 
 ---
+
+## Step 7 - Local test
+
+Now run the application from a local Bash terminal:
+
+```bash
+ export CSVFILE=./Models/TestData/IBASProduction2022.csv # May require adaptation
+ dotnet run
+```
+
+---
