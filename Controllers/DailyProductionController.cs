@@ -4,6 +4,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Azure;
+using Azure.Data.Tables;
+
 using DailyProduction.Models;
 
 namespace IbasAPI.Controllers
@@ -13,59 +17,57 @@ namespace IbasAPI.Controllers
     public class DailyProductionController : ControllerBase
     {
 
-        private List<DailyProductionDTO> _productionRepo;
+        private List<DailyProductionDTO> _productionRepo = new List<DailyProductionDTO>();
         private readonly ILogger<DailyProductionController> _logger;
+        private readonly string _connectionString = string.Empty;
+        private readonly string _tableName = string.Empty;
 
-        public DailyProductionController(ILogger<DailyProductionController> logger)
+        public DailyProductionController(ILogger<DailyProductionController> logger, IConfiguration configuration)
         {
             _logger = logger;
-            _productionRepo = new List<DailyProductionDTO>
-            {
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.IBv1, ItemsProduced = 12},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.IBv1, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.IBv1, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.IBv1, ItemsProduced = 141},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.IBv1, ItemsProduced = 146},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.IBv1, ItemsProduced = 162},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.IBv1, ItemsProduced = 102},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.IBv1, ItemsProduced = 210},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.IBv1, ItemsProduced = 144},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.IBv1, ItemsProduced = 151},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.IBv1, ItemsProduced = 61},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.IBv1, ItemsProduced = 86},
-
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.evIB100, ItemsProduced = 1},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.evIB100, ItemsProduced = 2},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.evIB100, ItemsProduced = 3},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.evIB100, ItemsProduced = 4},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.evIB100, ItemsProduced = 4},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.evIB100, ItemsProduced = 6},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.evIB100, ItemsProduced = 10},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.evIB100, ItemsProduced = 21},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.evIB100, ItemsProduced = 17},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.evIB100, ItemsProduced = 15},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.evIB100, ItemsProduced = 25},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.evIB100, ItemsProduced = 30},
-
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.evIB200, ItemsProduced = 10},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.evIB200, ItemsProduced = 2},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.evIB200, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.evIB200, ItemsProduced = 41},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.evIB200, ItemsProduced = 46},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.evIB200, ItemsProduced = 62},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.evIB200, ItemsProduced = 102},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.evIB200, ItemsProduced = 21},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.evIB200, ItemsProduced = 44},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.evIB200, ItemsProduced = 51},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.evIB200, ItemsProduced = 61},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.evIB200, ItemsProduced = 88}
-            };
+            _connectionString = configuration.GetValue<string>("TableConnectionString") ?? string.Empty;
+            _tableName = configuration.GetValue<string>("TABLENAME") ?? string.Empty;
         }
         
         [HttpGet]
-        public IEnumerable<DailyProductionDTO> Get()
+        public async Task<IActionResult> Get()
         {
-            return _productionRepo;
+            // 1) Validate that the table storage configuration is present
+            if (string.IsNullOrEmpty(_connectionString) || string.IsNullOrEmpty(_tableName))
+            {
+                return StatusCode(500, "Table storage configuration is missing.");
+            }
+
+            // 2) Create a Azure TableClient
+            var tableClient = new TableClient(_connectionString, _tableName);
+            var results = new List<DailyProductionDTO>();
+
+            // 3) Query the table for all entities, converting them to DailyProductionDTO objects
+            try
+            {
+                // Pageable query to get all entities using specialized TableEntity type, 
+                // which allows dynamic access to properties
+                AsyncPageable<TableEntity> queryResults = tableClient.QueryAsync<TableEntity>(filter: "");
+
+                await foreach (TableEntity entity in queryResults)
+                {
+                    results.Add(new DailyProductionDTO
+                    {
+                        // Convert the PartitionKey to the BikeModel enum, 
+                        // the RowKey to a DateTime, 
+                        // and get the itemsProduced property as an integer
+                        Model = (BikeModel) Enum.Parse(typeof(BikeModel), entity.PartitionKey),
+                        Date = DateTime.Parse(entity.RowKey),
+                        ItemsProduced = (int)(entity.GetInt32("itemsProduced") ?? 0),
+                    });
+                }
+
+                return Ok(results);
+            }
+            catch (RequestFailedException ex)
+            {
+                return StatusCode((int)ex.Status, ex.Message);
+            }
         }
     }
 }
