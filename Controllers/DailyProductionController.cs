@@ -1,10 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using CsvHelper;
+using CsvHelper.TypeConversion;
+using CsvHelper.Configuration;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using DailyProduction.Models;
+using System.Globalization;
 
 namespace IbasAPI.Controllers
 {
@@ -12,60 +11,84 @@ namespace IbasAPI.Controllers
     [Route("[controller]")]
     public class DailyProductionController : ControllerBase
     {
-
-        private List<DailyProductionDTO> _productionRepo;
+        private List<DailyProductionDTO> _productionRepo = new List<DailyProductionDTO>();
         private readonly ILogger<DailyProductionController> _logger;
+        private readonly string? _filePath;
 
-        public DailyProductionController(ILogger<DailyProductionController> logger)
+        public DailyProductionController(ILogger<DailyProductionController> logger, IConfiguration configuration)
         {
             _logger = logger;
-            _productionRepo = new List<DailyProductionDTO>
-            {
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.IBv1, ItemsProduced = 12},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.IBv1, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.IBv1, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.IBv1, ItemsProduced = 141},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.IBv1, ItemsProduced = 146},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.IBv1, ItemsProduced = 162},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.IBv1, ItemsProduced = 102},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.IBv1, ItemsProduced = 210},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.IBv1, ItemsProduced = 144},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.IBv1, ItemsProduced = 151},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.IBv1, ItemsProduced = 61},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.IBv1, ItemsProduced = 86},
-
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.evIB100, ItemsProduced = 1},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.evIB100, ItemsProduced = 2},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.evIB100, ItemsProduced = 3},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.evIB100, ItemsProduced = 4},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.evIB100, ItemsProduced = 4},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.evIB100, ItemsProduced = 6},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.evIB100, ItemsProduced = 10},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.evIB100, ItemsProduced = 21},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.evIB100, ItemsProduced = 17},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.evIB100, ItemsProduced = 15},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.evIB100, ItemsProduced = 25},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.evIB100, ItemsProduced = 30},
-
-                new DailyProductionDTO {Date = new DateTime(2020, 1, 31), Model = BikeModel.evIB200, ItemsProduced = 10},
-                new DailyProductionDTO {Date = new DateTime(2020, 2, 28), Model = BikeModel.evIB200, ItemsProduced = 2},
-                new DailyProductionDTO {Date = new DateTime(2020, 3, 31), Model = BikeModel.evIB200, ItemsProduced = 32},
-                new DailyProductionDTO {Date = new DateTime(2020, 4, 30), Model = BikeModel.evIB200, ItemsProduced = 41},
-                new DailyProductionDTO {Date = new DateTime(2020, 5, 31), Model = BikeModel.evIB200, ItemsProduced = 46},
-                new DailyProductionDTO {Date = new DateTime(2020, 6, 30), Model = BikeModel.evIB200, ItemsProduced = 62},
-                new DailyProductionDTO {Date = new DateTime(2020, 7, 31), Model = BikeModel.evIB200, ItemsProduced = 102},
-                new DailyProductionDTO {Date = new DateTime(2020, 8, 31), Model = BikeModel.evIB200, ItemsProduced = 21},
-                new DailyProductionDTO {Date = new DateTime(2020, 9, 30), Model = BikeModel.evIB200, ItemsProduced = 44},
-                new DailyProductionDTO {Date = new DateTime(2020, 10, 31), Model = BikeModel.evIB200, ItemsProduced = 51},
-                new DailyProductionDTO {Date = new DateTime(2020, 11, 30), Model = BikeModel.evIB200, ItemsProduced = 61},
-                new DailyProductionDTO {Date = new DateTime(2020, 12, 31), Model = BikeModel.evIB200, ItemsProduced = 88}
-            };
+            // Get the CSV file path from configuration
+            _filePath = configuration.GetValue<string>("CSVFILE");
         }
         
         [HttpGet]
         public IEnumerable<DailyProductionDTO> Get()
         {
+            List<DailyProductionCSV> csvRecords;
+
+            // 1. Read data from CSV file into temporary list            
+            try
+            {
+                csvRecords = LoadDataFromCSV();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading CSV file.");
+                return Enumerable.Empty<DailyProductionDTO>();
+            }
+
+            // 2. Map CSV records to DTOs and store in repository
+            _productionRepo = csvRecords.Select(csvRow => new DailyProductionDTO
+            {
+                Date = csvRow.Date,
+                Model = (BikeModel)csvRow.Model, // Assuming Model in CSV corresponds to BikeModel enum
+                ItemsProduced = csvRow.ItemsProduced
+            }).ToList();
+
             return _productionRepo;
+        }
+
+        /// <summary>
+        /// Loads data from the CSV file and returns a list of DailyProductionCSV records.
+        /// </summary>
+        /// <returns>A list of DailyProductionCSV records.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the CSV file path is not configured.</exception>
+        /// <exception cref="ApplicationException">Thrown when there is an error reading the CSV file.</exception>
+        private List<DailyProductionCSV> LoadDataFromCSV()
+        {
+            Stream fileStream = new FileStream(
+                _filePath ?? throw new InvalidOperationException("CSV file path is not configured."),
+                FileMode.Open, FileAccess.Read);
+
+            try
+            {
+                var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = true,
+                    MissingFieldFound = null, // Ignore missing fields
+                    HeaderValidated = null, // Ignore header validation
+                    BadDataFound = null // Ignore bad data
+                };
+
+                using var reader = new StreamReader(fileStream);
+                using var csv = new CsvReader(reader, config);
+                
+                var records = csv.GetRecords<DailyProductionCSV>().ToList();
+                return records;
+            }
+            catch (HeaderValidationException ex)
+            {
+                throw new ApplicationException("CSV file header is invalid.", ex);
+            }
+            catch (TypeConverterException ex)
+            {
+                throw new ApplicationException("CSV file contains invalid data format.", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new ApplicationException("Error reading CSV file", ex);
+            }
         }
     }
 }
