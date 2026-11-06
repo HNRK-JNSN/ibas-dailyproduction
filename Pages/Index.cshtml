@@ -9,7 +9,14 @@
 </div>
 
 <div class="h-100 d-flex justify-content-center" >
-    <div style="width: 75%" id="daily_production_graph"></div>
+    <div style="width: 75%" id="daily_production_graph">
+        <div id="graph_spinner" class="text-center my-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <div id="graph_error" class="alert alert-danger text-center my-5" style="display:none">Failed to connect data</div>
+    </div>
 </div>
 
 @section Scripts
@@ -17,11 +24,20 @@
     <script>       
         d3.json("/dailyproduction")
             .then( function(data) {
+                document.getElementById("graph_spinner").style.display = "none";
+                if (!Array.isArray(data) || data.length === 0) {
+                    document.getElementById("graph_error").style.display = "block";
+                    return;
+                }
                 let ts = ['x'].concat(data.map( x => new Date(x.date)));
                 let ib1 = ['IBv1'].concat(data.filter(x => x.model === 1).map( x => x.itemsProduced));
                 let ev100 = ['evIB100'].concat(data.filter(x => x.model === 2).map( x => x.itemsProduced));
                 let ev200 = ['evIB200'].concat(data.filter(x => x.model === 3).map( x => x.itemsProduced));
                 this.graphSummaryData([ts, ib1, ev100, ev200], "Production", "#daily_production_graph");
-            });
+                            })
+                            .catch( function() {
+                                document.getElementById("graph_spinner").style.display = "none";
+                                document.getElementById("graph_error").style.display = "block";
+                            });
     </script>
 }
